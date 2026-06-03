@@ -1,8 +1,8 @@
 {
   "name": "scys-official-assistant",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "private": true,
   "scripts": {
-    "test": "node --check \"生财有术看图助手-1.6.user.js\" && node tests/scys-official-assistant.test.js"
+    "test": "node --check \"生财有术看图助手-1.7.user.js\" && node tests/scys-official-assistant.test.js"
   }
 }

@@ -4,11 +4,11 @@ const path = require('node:path');
 const vm = require('node:vm');
 const nodeCrypto = require('node:crypto');
 
-const scriptPath = path.resolve(__dirname, '..', '生财有术看图助手-1.6.user.js');
+const scriptPath = path.resolve(__dirname, '..', '生财有术看图助手-1.7.user.js');
 const source = fs.readFileSync(scriptPath, 'utf8');
 
 assert.match(source, /@name\s+生财有术看图助手/);
-assert.match(source, /@version\s+1\.6/);
+assert.match(source, /@version\s+1\.7/);
 assert.match(source, /@author\s+料主（liaozhu913）/);
 assert.match(source, /@description\s+图片增强/);
 assert.doesNotMatch(source, /@description[^\n]*Markdown/);
@@ -241,6 +241,9 @@ assert.equal(typeof helpers.setMarkdownBarEnabled, 'function');
   assert.equal(bundle.filename, '飞书测试文档.zip');
   assert.equal(bundle.blob.type, 'application/zip');
   assert.ok(bundle.blob.size > 100);
+  const larkImagesAfterBundle = await helpers.collectLarkImages();
+  assert.equal(larkImagesAfterBundle.length, 1);
+  assert.equal(larkImagesAfterBundle[0].url, 'https://example.feishu.cn/image.png');
 
   console.log('scys-official-assistant tests passed');
 })().catch(error => {
