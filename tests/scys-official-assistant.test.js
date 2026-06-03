@@ -4,11 +4,11 @@ const path = require('node:path');
 const vm = require('node:vm');
 const nodeCrypto = require('node:crypto');
 
-const scriptPath = path.resolve(__dirname, '..', '生财有术看图助手-1.7.user.js');
+const scriptPath = path.resolve(__dirname, '..', '生财有术看图助手-1.8.user.js');
 const source = fs.readFileSync(scriptPath, 'utf8');
 
 assert.match(source, /@name\s+生财有术看图助手/);
-assert.match(source, /@version\s+1\.7/);
+assert.match(source, /@version\s+1\.8/);
 assert.match(source, /@author\s+料主（liaozhu913）/);
 assert.match(source, /@description\s+图片增强/);
 assert.doesNotMatch(source, /@description[^\n]*Markdown/);
@@ -179,6 +179,7 @@ assert.equal(typeof helpers.setMarkdownBarEnabled, 'function');
   context.window.location.href = context.location.href;
   context.location.hostname = 'example.feishu.cn';
   context.window.location.hostname = 'example.feishu.cn';
+  let imageSourceFetchCount = 0;
   context.unsafeWindow.PageMain = {
     blockManager: {
       rootBlockModel: {
@@ -211,6 +212,7 @@ assert.equal(typeof helpers.setMarkdownBarEnabled, 'function');
             children: [],
             imageManager: {
               async fetch(_payload, _options, callback) {
+                imageSourceFetchCount += 1;
                 callback({ src: 'https://example.feishu.cn/image.png', originSrc: 'https://example.feishu.cn/image-origin.png' });
               },
             },
@@ -231,6 +233,7 @@ assert.equal(typeof helpers.setMarkdownBarEnabled, 'function');
   const larkImages = await helpers.collectLarkImages();
   assert.equal(larkImages.length, 1);
   assert.equal(larkImages[0].url, 'https://example.feishu.cn/image.png');
+  assert.equal(imageSourceFetchCount, 1);
   const larkMarkdown = await helpers.buildMarkdownFromPage();
   assert.match(larkMarkdown, /# 飞书测试文档/);
   assert.match(larkMarkdown, /##? 标题一/);
@@ -238,6 +241,7 @@ assert.equal(typeof helpers.setMarkdownBarEnabled, 'function');
   assert.match(larkMarkdown, /- 列表项/);
   assert.match(larkMarkdown, /!\[demo\.png\]\(https:\/\/example\.feishu\.cn\/image\.png\)/);
   const bundle = await helpers.buildLarkDownloadBundle();
+  assert.equal(imageSourceFetchCount, 1);
   assert.equal(bundle.filename, '飞书测试文档.zip');
   assert.equal(bundle.blob.type, 'application/zip');
   assert.ok(bundle.blob.size > 100);
