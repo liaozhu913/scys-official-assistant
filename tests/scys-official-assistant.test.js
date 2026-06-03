@@ -4,11 +4,11 @@ const path = require('node:path');
 const vm = require('node:vm');
 const nodeCrypto = require('node:crypto');
 
-const scriptPath = path.resolve(__dirname, '..', '生财有术看图助手-1.8.user.js');
+const scriptPath = path.resolve(__dirname, '..', '生财有术看图助手-1.9.user.js');
 const source = fs.readFileSync(scriptPath, 'utf8');
 
 assert.match(source, /@name\s+生财有术看图助手/);
-assert.match(source, /@version\s+1\.8/);
+assert.match(source, /@version\s+1\.9/);
 assert.match(source, /@author\s+料主（liaozhu913）/);
 assert.match(source, /@description\s+图片增强/);
 assert.doesNotMatch(source, /@description[^\n]*Markdown/);
@@ -20,6 +20,7 @@ assert.match(source, /@grant\s+unsafeWindow/);
 assert.match(source, /@grant\s+GM_registerMenuCommand/);
 assert.match(source, /@grant\s+GM_getValue/);
 assert.match(source, /@grant\s+GM_setValue/);
+assert.match(source, /@grant\s+GM_download/);
 assert.match(source, /scys-helper-mdbar-visible/);
 assert.match(source, /显示高级功能浮窗按钮/);
 assert.doesNotMatch(source, /页面右下角会显示 Markdown/);
@@ -57,7 +58,9 @@ const fakeDocument = {
   querySelector() {
     return null;
   },
-  querySelectorAll() {
+  renderedImages: [],
+  querySelectorAll(selector) {
+    if (selector === 'img') return this.renderedImages;
     return [];
   },
 };
@@ -230,6 +233,21 @@ assert.equal(typeof helpers.setMarkdownBarEnabled, 'function');
       },
     };
   };
+  fakeDocument.renderedImages = [{
+    currentSrc: 'https://example.feishu.cn/image.png',
+    src: 'https://example.feishu.cn/image.png',
+    naturalWidth: 1080,
+    naturalHeight: 720,
+    width: 1080,
+    height: 720,
+    className: 'docx-image success',
+    getAttribute(name) {
+      return name === 'alt' ? 'demo.png' : null;
+    },
+    closest() {
+      return null;
+    },
+  }];
   const larkImages = await helpers.collectLarkImages();
   assert.equal(larkImages.length, 1);
   assert.equal(larkImages[0].url, 'https://example.feishu.cn/image.png');
