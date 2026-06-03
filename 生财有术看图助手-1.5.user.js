@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         生财有术看图助手
 // @namespace    https://scys.com/
-// @version      1.4
+// @version      1.5
 // @description  图片增强：点击生财有术官网内容图片即可放大查看、自由缩放、拖拽平移并切换上下张。
 // @author       料主（liaozhu913）
 // @match        https://scys.com/*
@@ -712,7 +712,7 @@
                 const sources = await new Promise((resolve, reject) => {
                     block.imageManager.fetch({ token: image.token, isHD: true, fuzzy: false }, {}, resolve).catch(reject);
                 });
-                image.__scysUrl = sources?.originSrc || sources?.src || '';
+                image.__scysUrl = sources?.src || sources?.originSrc || '';
                 return sources || {};
             } catch (error) {
                 console.error('fetch lark image failed', error);
@@ -738,7 +738,7 @@
         for (const block of blocks) {
             const sources = await fetchLarkImageSources(block);
             const image = block?.snapshot?.image || {};
-            const url = sources?.originSrc || sources?.src || getLarkImageCachedUrl(block);
+            const url = sources?.src || sources?.originSrc || getLarkImageCachedUrl(block);
             if (!url) continue;
             images.push({
                 url,
@@ -841,6 +841,11 @@
         anchor.click();
         anchor.remove();
         URL.revokeObjectURL(objectUrl);
+    }
+
+    function ensureImageFileName(name) {
+        const clean = normalizeFileName(name || 'image');
+        return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(clean) ? clean : `${clean}.png`;
     }
 
     function copyTextWithTextArea(text) {
@@ -1161,7 +1166,7 @@
                 const item = document.createElement('div');
                 item.className = `${SCRIPT_NS}-gallery-item is-selected`;
                 item.dataset.url = image.url;
-                item.dataset.filename = normalizeFileName(`${String(index + 1).padStart(2, '0')}-${image.name || image.alt || 'image'}`);
+                item.dataset.filename = ensureImageFileName(`${String(index + 1).padStart(2, '0')}-${image.name || image.alt || 'image'}`);
                 item.innerHTML = `<img src="${image.url}" alt=""><div class="${SCRIPT_NS}-gallery-check"></div>`;
                 item.addEventListener('click', () => {
                     item.classList.toggle('is-selected');
@@ -1187,7 +1192,7 @@
         for (let i = 0; i < selected.length; i += 1) {
             const item = selected[i];
             const url = item.dataset.url;
-            const filename = `${item.dataset.filename || `image-${i + 1}`}.png`;
+            const filename = item.dataset.filename || `image-${i + 1}.png`;
             try {
                 await downloadUrl(url, filename);
                 success += 1;

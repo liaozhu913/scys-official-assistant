@@ -4,11 +4,11 @@ const path = require('node:path');
 const vm = require('node:vm');
 const nodeCrypto = require('node:crypto');
 
-const scriptPath = path.resolve(__dirname, '..', '生财有术看图助手-1.4.user.js');
+const scriptPath = path.resolve(__dirname, '..', '生财有术看图助手-1.5.user.js');
 const source = fs.readFileSync(scriptPath, 'utf8');
 
 assert.match(source, /@name\s+生财有术看图助手/);
-assert.match(source, /@version\s+1\.4/);
+assert.match(source, /@version\s+1\.5/);
 assert.match(source, /@author\s+料主（liaozhu913）/);
 assert.match(source, /@description\s+图片增强/);
 assert.doesNotMatch(source, /@description[^\n]*Markdown/);
@@ -220,13 +220,13 @@ assert.equal(typeof helpers.setMarkdownBarEnabled, 'function');
   };
   const larkImages = await helpers.collectLarkImages();
   assert.equal(larkImages.length, 1);
-  assert.equal(larkImages[0].url, 'https://example.feishu.cn/image-origin.png');
+  assert.equal(larkImages[0].url, 'https://example.feishu.cn/image.png');
   const larkMarkdown = await helpers.buildMarkdownFromPage();
   assert.match(larkMarkdown, /# 飞书测试文档/);
   assert.match(larkMarkdown, /##? 标题一/);
   assert.match(larkMarkdown, /正文/);
   assert.match(larkMarkdown, /- 列表项/);
-  assert.match(larkMarkdown, /!\[demo\.png\]\(https:\/\/example\.feishu\.cn\/image-origin\.png\)/);
+  assert.match(larkMarkdown, /!\[demo\.png\]\(https:\/\/example\.feishu\.cn\/image\.png\)/);
 
   console.log('scys-official-assistant tests passed');
 })().catch(error => {
