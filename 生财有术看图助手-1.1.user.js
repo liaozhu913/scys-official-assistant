@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         生财有术官网助手
+// @name         生财有术看图助手
 // @namespace    https://scys.com/
-// @version      1.0
-// @description  图片增强：点击生财有术官网内容图片即可放大查看、自由缩放、拖拽平移并切换上下张；私用 Markdown 功能需密钥解锁。
+// @version      1.1
+// @description  图片增强：点击生财有术官网内容图片即可放大查看、自由缩放、拖拽平移并切换上下张。
 // @author       料主（liaozhu913）
 // @match        https://scys.com/*
 // @grant        GM_addStyle
@@ -633,8 +633,8 @@
 
     function openPreview(markdown) {
         const previewWindow = window.open('', '_blank', 'width=980,height=720');
-        if (!previewWindow) throw new Error('无法打开 Markdown 预览窗口');
-        previewWindow.document.title = '生财文章 Markdown 预览';
+        if (!previewWindow) throw new Error('无法打开高级功能预览窗口');
+        previewWindow.document.title = '生财文章预览';
         previewWindow.document.body.innerHTML = '';
         const style = previewWindow.document.createElement('style');
         style.textContent = 'body{margin:0;padding:24px;background:#f6f7f8;color:#1f2933;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}pre{max-width:980px;margin:0 auto;padding:20px;border:1px solid #d8dee4;border-radius:8px;background:#fff;white-space:pre-wrap;word-break:break-word;line-height:1.65;font-size:14px}';
@@ -799,15 +799,15 @@
             if (action === 'view') openPreview(markdown);
             if (action === 'copy') {
                 await copyText(markdown);
-                notify('Markdown 已复制');
+                notify('内容已复制');
             }
             if (action === 'download') {
                 downloadText(`${normalizeFileName(meta.title)}.md`, markdown);
-                notify('Markdown 已开始下载');
+                notify('内容已开始下载');
             }
         } catch (error) {
             console.error(error);
-            notify(error.message || 'Markdown 操作失败', 'error');
+            notify(error.message || '高级功能操作失败', 'error');
         }
     }
 
@@ -829,9 +829,9 @@
         if (qs(`.${SCRIPT_NS}-mdbar`)) return;
         const bar = document.createElement('div');
         bar.className = `${SCRIPT_NS}-mdbar`;
-        bar.appendChild(createButton('查看MD', '查看 Markdown', () => runMarkdownAction('view')));
-        bar.appendChild(createButton('复制MD', '复制 Markdown', () => runMarkdownAction('copy')));
-        bar.appendChild(createButton('下载MD', '下载 Markdown', () => runMarkdownAction('download')));
+        bar.appendChild(createButton('查看', '查看高级内容', () => runMarkdownAction('view')));
+        bar.appendChild(createButton('复制', '复制高级内容', () => runMarkdownAction('copy')));
+        bar.appendChild(createButton('下载', '下载高级内容', () => runMarkdownAction('download')));
         document.body.appendChild(bar);
     }
 
@@ -857,7 +857,7 @@
         mask.innerHTML = `
             <div class="${SCRIPT_NS}-advanced-panel" role="dialog" aria-modal="true">
                 <h3>高级功能</h3>
-                <p>请把随机设备码发给料主（liaozhu913）获取解锁密钥。解锁成功后，页面右下角会显示 Markdown 私用功能按钮。</p>
+                <p>高级功能需要联系料主（liaozhu913）授权解锁。解锁成功后，可在这里管理高级功能按钮的显示状态。</p>
                 <label>随机设备码</label>
                 <div class="${SCRIPT_NS}-advanced-row">
                     <input class="${SCRIPT_NS}-advanced-device" readonly />
@@ -867,7 +867,7 @@
                 <input class="${SCRIPT_NS}-advanced-key" placeholder="粘贴料主提供的解锁密钥" />
                 <label class="${SCRIPT_NS}-advanced-toggle">
                     <input class="${SCRIPT_NS}-mdbar-toggle" type="checkbox" />
-                    显示 Markdown 浮窗按钮
+                    显示高级功能浮窗按钮
                 </label>
                 <div class="${SCRIPT_NS}-advanced-actions">
                     <button type="button" class="${SCRIPT_NS}-advanced-close">关闭</button>
@@ -890,7 +890,7 @@
         qs(`.${SCRIPT_NS}-mdbar-toggle`, mask).addEventListener('change', async event => {
             setMarkdownBarEnabled(event.target.checked);
             await refreshMarkdownBar();
-            notify(event.target.checked ? 'Markdown 浮窗按钮已显示' : 'Markdown 浮窗按钮已隐藏');
+            notify(event.target.checked ? '高级功能浮窗按钮已显示' : '高级功能浮窗按钮已隐藏');
         });
         document.body.appendChild(mask);
         return mask;
