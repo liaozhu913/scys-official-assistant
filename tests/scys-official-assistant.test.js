@@ -4,11 +4,11 @@ const path = require('node:path');
 const vm = require('node:vm');
 const nodeCrypto = require('node:crypto');
 
-const scriptPath = path.resolve(__dirname, '..', '生财有术看图助手-1.3.user.js');
+const scriptPath = path.resolve(__dirname, '..', '生财有术看图助手-1.4.user.js');
 const source = fs.readFileSync(scriptPath, 'utf8');
 
 assert.match(source, /@name\s+生财有术看图助手/);
-assert.match(source, /@version\s+1\.3/);
+assert.match(source, /@version\s+1\.4/);
 assert.match(source, /@author\s+料主（liaozhu913）/);
 assert.match(source, /@description\s+图片增强/);
 assert.doesNotMatch(source, /@description[^\n]*Markdown/);
@@ -130,6 +130,7 @@ assert.equal(typeof helpers.isViewableImage, 'function');
 assert.equal(typeof helpers.verifyMarkdownUnlockKey, 'function');
 assert.equal(typeof helpers.buildMarkdownUnlockKey, 'function');
 assert.equal(typeof helpers.buildMarkdownFromPage, 'function');
+assert.equal(typeof helpers.collectLarkImages, 'function');
 assert.equal(typeof helpers.copyText, 'function');
 assert.equal(typeof helpers.isMarkdownBarEnabled, 'function');
 assert.equal(typeof helpers.setMarkdownBarEnabled, 'function');
@@ -202,15 +203,30 @@ assert.equal(typeof helpers.setMarkdownBarEnabled, 'function');
             zoneState: { allText: '列表项', content: { ops: [{ insert: '列表项' }] } },
             children: [],
           },
+          {
+            type: 'image',
+            snapshot: { type: 'image', image: { token: 'img-token', name: 'demo.png' } },
+            zoneState: { allText: '', content: { ops: [] } },
+            children: [],
+            imageManager: {
+              async fetch(_payload, _options, callback) {
+                callback({ src: 'https://example.feishu.cn/image.png', originSrc: 'https://example.feishu.cn/image-origin.png' });
+              },
+            },
+          },
         ],
       },
     },
   };
-  const larkMarkdown = helpers.buildMarkdownFromPage();
+  const larkImages = await helpers.collectLarkImages();
+  assert.equal(larkImages.length, 1);
+  assert.equal(larkImages[0].url, 'https://example.feishu.cn/image-origin.png');
+  const larkMarkdown = await helpers.buildMarkdownFromPage();
   assert.match(larkMarkdown, /# 飞书测试文档/);
   assert.match(larkMarkdown, /##? 标题一/);
   assert.match(larkMarkdown, /正文/);
   assert.match(larkMarkdown, /- 列表项/);
+  assert.match(larkMarkdown, /!\[demo\.png\]\(https:\/\/example\.feishu\.cn\/image-origin\.png\)/);
 
   console.log('scys-official-assistant tests passed');
 })().catch(error => {

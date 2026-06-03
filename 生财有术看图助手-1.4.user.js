@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         生财有术看图助手
 // @namespace    https://scys.com/
-// @version      1.3
+// @version      1.4
 // @description  图片增强：点击生财有术官网内容图片即可放大查看、自由缩放、拖拽平移并切换上下张。
 // @author       料主（liaozhu913）
 // @match        https://scys.com/*
@@ -247,6 +247,45 @@
                 background: #fff; color: #111827; cursor: pointer; font-size: 13px;
             }
             .${SCRIPT_NS}-advanced-panel button[data-primary="true"] { border-color: #059669; background: #059669; color: #fff; }
+            .${SCRIPT_NS}-gallery-mask {
+                position: fixed; inset: 0; z-index: 2147483646; display: none;
+                background: rgba(15, 23, 42, 0.44);
+            }
+            .${SCRIPT_NS}-gallery-mask.is-visible { display: flex; align-items: center; justify-content: center; }
+            .${SCRIPT_NS}-gallery-panel {
+                width: min(880px, calc(100vw - 28px)); height: min(720px, calc(100vh - 28px));
+                border-radius: 8px; background: #fff; color: #111827; box-shadow: 0 24px 80px rgba(15, 23, 42, 0.34);
+                display: flex; flex-direction: column; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            }
+            .${SCRIPT_NS}-gallery-head, .${SCRIPT_NS}-gallery-foot {
+                display: flex; align-items: center; justify-content: space-between; gap: 10px;
+                padding: 12px 14px; border-bottom: 1px solid #e5e7eb;
+            }
+            .${SCRIPT_NS}-gallery-foot { border-top: 1px solid #e5e7eb; border-bottom: 0; }
+            .${SCRIPT_NS}-gallery-head strong { font-size: 16px; }
+            .${SCRIPT_NS}-gallery-body { flex: 1; overflow: auto; padding: 12px; background: #f9fafb; }
+            .${SCRIPT_NS}-gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(126px, 1fr)); gap: 10px; }
+            .${SCRIPT_NS}-gallery-item {
+                position: relative; aspect-ratio: 1; border: 2px solid #e5e7eb; border-radius: 6px;
+                overflow: hidden; background: #fff; cursor: pointer;
+            }
+            .${SCRIPT_NS}-gallery-item.is-selected { border-color: #059669; }
+            .${SCRIPT_NS}-gallery-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+            .${SCRIPT_NS}-gallery-check {
+                position: absolute; left: 6px; top: 6px; width: 20px; height: 20px; border: 1px solid #d1d5db;
+                border-radius: 4px; background: rgba(255, 255, 255, 0.92);
+            }
+            .${SCRIPT_NS}-gallery-item.is-selected .${SCRIPT_NS}-gallery-check { background: #059669; border-color: #059669; }
+            .${SCRIPT_NS}-gallery-item.is-selected .${SCRIPT_NS}-gallery-check::after {
+                content: ""; position: absolute; left: 5px; top: 3px; width: 8px; height: 12px;
+                border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg);
+            }
+            .${SCRIPT_NS}-gallery-panel button {
+                width: auto; min-width: 82px; height: 34px; border: 1px solid #d1d5db; border-radius: 6px;
+                background: #fff; color: #111827; cursor: pointer; font-size: 13px;
+            }
+            .${SCRIPT_NS}-gallery-panel button[data-primary="true"] { border-color: #059669; background: #059669; color: #fff; }
+            .${SCRIPT_NS}-gallery-panel button:disabled { opacity: 0.55; cursor: not-allowed; }
             .${SCRIPT_NS}-mdbar {
                 position: fixed; right: 18px; bottom: 86px; z-index: 2147483600;
                 display: none; flex-direction: column; gap: 8px;
@@ -655,8 +694,65 @@
     function renderLarkImage(block) {
         const image = block?.snapshot?.image || {};
         const alt = escapeMarkdownText(image.caption?.text?.initialAttributedTexts?.text?.[0] || image.name || '图片');
-        const src = image.url || image.originSrc || image.src || (image.token ? `lark-image-token:${image.token}` : '');
+        const src = getLarkImageCachedUrl(block) || image.url || image.originSrc || image.src || (image.token ? `lark-image-token:${image.token}` : '');
         return src ? `![${alt}](${escapeMarkdownUrl(src)})` : '';
+    }
+
+    function getLarkImageCachedUrl(block) {
+        const image = block?.snapshot?.image || {};
+        return image.__scysUrl || image.originSrc || image.src || image.url || '';
+    }
+
+    async function fetchLarkImageSources(block) {
+        const image = block?.snapshot?.image || {};
+        const cached = getLarkImageCachedUrl(block);
+        if (cached && !String(cached).startsWith('lark-image-token:')) return { src: cached, originSrc: cached };
+        if (block?.imageManager?.fetch && image.token) {
+            try {
+                const sources = await new Promise((resolve, reject) => {
+                    block.imageManager.fetch({ token: image.token, isHD: true, fuzzy: false }, {}, resolve).catch(reject);
+                });
+                image.__scysUrl = sources?.originSrc || sources?.src || '';
+                return sources || {};
+            } catch (error) {
+                console.error('fetch lark image failed', error);
+            }
+        }
+        return { src: image.url || image.originSrc || image.src || '', originSrc: image.originSrc || '' };
+    }
+
+    function collectLarkImageBlocks(root = getLarkRootBlock()) {
+        const blocks = [];
+        const walk = block => {
+            if (!block) return;
+            if (block.type === 'image') blocks.push(block);
+            (block.children || []).forEach(walk);
+        };
+        walk(root);
+        return blocks;
+    }
+
+    async function collectLarkImages() {
+        const blocks = collectLarkImageBlocks();
+        const images = [];
+        for (const block of blocks) {
+            const sources = await fetchLarkImageSources(block);
+            const image = block?.snapshot?.image || {};
+            const url = sources?.originSrc || sources?.src || getLarkImageCachedUrl(block);
+            if (!url) continue;
+            images.push({
+                url,
+                alt: image.caption?.text?.initialAttributedTexts?.text?.[0] || image.name || '图片',
+                name: image.name || `lark-image-${images.length + 1}`,
+                token: image.token || '',
+            });
+        }
+        const seen = new Set();
+        return images.filter(item => {
+            if (seen.has(item.url)) return false;
+            seen.add(item.url);
+            return true;
+        });
     }
 
     function renderLarkListItem(block, depth, ordered, todo) {
@@ -703,15 +799,16 @@
         return renderLarkChildren(block, depth) || renderLarkInline(block);
     }
 
-    function buildLarkMarkdownFromPage() {
+    async function buildLarkMarkdownFromPage() {
         const root = getLarkRootBlock();
         if (!root) throw new Error('未找到飞书文档数据，请确认页面已加载完成');
+        await collectLarkImages();
         const title = getLarkTitle(root);
         const body = renderLarkBlock(root);
         return compactMarkdown([`# ${title}`, `原文：${window.location.href}`, body].filter(Boolean).join('\n\n'));
     }
 
-    function buildMarkdownFromPage() {
+    async function buildMarkdownFromPage() {
         if (isLarkHost()) return buildLarkMarkdownFromPage();
         return buildScysMarkdownFromPage();
     }
@@ -730,6 +827,20 @@
         anchor.click();
         anchor.remove();
         URL.revokeObjectURL(url);
+    }
+
+    async function downloadUrl(url, filename) {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`下载失败：${response.status}`);
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = objectUrl;
+        anchor.download = filename;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(objectUrl);
     }
 
     function copyTextWithTextArea(text) {
@@ -941,7 +1052,7 @@
     async function runMarkdownAction(action) {
         if (!await ensureMarkdownUnlocked()) return;
         try {
-            const markdown = buildMarkdownFromPage();
+            const markdown = await buildMarkdownFromPage();
             const meta = getArticleMeta();
             if (action === 'view') openPreview(markdown);
             if (action === 'copy') {
@@ -979,7 +1090,115 @@
         bar.appendChild(createButton('查看', '查看高级内容', () => runMarkdownAction('view')));
         bar.appendChild(createButton('复制', '复制高级内容', () => runMarkdownAction('copy')));
         bar.appendChild(createButton('下载', '下载高级内容', () => runMarkdownAction('download')));
+        bar.appendChild(createButton('图片', '查看并下载图片', () => openImageGallery()));
         document.body.appendChild(bar);
+    }
+
+    function closeImageGallery() {
+        const mask = qs(`.${SCRIPT_NS}-gallery-mask`);
+        if (mask) mask.classList.remove('is-visible');
+    }
+
+    function createImageGallery() {
+        let mask = qs(`.${SCRIPT_NS}-gallery-mask`);
+        if (mask) return mask;
+        mask = document.createElement('div');
+        mask.className = `${SCRIPT_NS}-gallery-mask`;
+        mask.innerHTML = `
+            <div class="${SCRIPT_NS}-gallery-panel" role="dialog" aria-modal="true">
+                <div class="${SCRIPT_NS}-gallery-head">
+                    <strong>图片下载</strong>
+                    <button type="button" class="${SCRIPT_NS}-gallery-close">关闭</button>
+                </div>
+                <div class="${SCRIPT_NS}-gallery-body">
+                    <div class="${SCRIPT_NS}-gallery-grid"></div>
+                </div>
+                <div class="${SCRIPT_NS}-gallery-foot">
+                    <label style="display:flex;align-items:center;gap:8px;margin:0;color:#374151;font-size:13px;"><input class="${SCRIPT_NS}-gallery-all" type="checkbox" /> 全选</label>
+                    <span class="${SCRIPT_NS}-gallery-count">已选 0 张</span>
+                    <button type="button" class="${SCRIPT_NS}-gallery-download" data-primary="true">下载图片</button>
+                </div>
+            </div>
+        `;
+        mask.addEventListener('click', event => {
+            if (event.target === mask || event.target.closest(`.${SCRIPT_NS}-gallery-close`)) closeImageGallery();
+        });
+        qs(`.${SCRIPT_NS}-gallery-all`, mask).addEventListener('change', event => {
+            qsa(`.${SCRIPT_NS}-gallery-item`, mask).forEach(item => item.classList.toggle('is-selected', event.target.checked));
+            updateImageGalleryCount(mask);
+        });
+        qs(`.${SCRIPT_NS}-gallery-download`, mask).addEventListener('click', () => downloadSelectedGalleryImages(mask));
+        document.body.appendChild(mask);
+        return mask;
+    }
+
+    function updateImageGalleryCount(mask) {
+        const selected = qsa(`.${SCRIPT_NS}-gallery-item.is-selected`, mask).length;
+        const total = qsa(`.${SCRIPT_NS}-gallery-item`, mask).length;
+        qs(`.${SCRIPT_NS}-gallery-count`, mask).textContent = `已选 ${selected} / ${total} 张`;
+        qs(`.${SCRIPT_NS}-gallery-download`, mask).disabled = selected === 0;
+    }
+
+    async function openImageGallery() {
+        if (!await ensureMarkdownUnlocked()) return;
+        if (!isLarkHost()) {
+            notify('当前页面没有可下载的飞书图片', 'error');
+            return;
+        }
+        const mask = createImageGallery();
+        const grid = qs(`.${SCRIPT_NS}-gallery-grid`, mask);
+        grid.textContent = '正在读取图片...';
+        mask.classList.add('is-visible');
+        try {
+            const images = await collectLarkImages();
+            grid.innerHTML = '';
+            if (!images.length) {
+                grid.textContent = '未找到可下载图片';
+                updateImageGalleryCount(mask);
+                return;
+            }
+            images.forEach((image, index) => {
+                const item = document.createElement('div');
+                item.className = `${SCRIPT_NS}-gallery-item is-selected`;
+                item.dataset.url = image.url;
+                item.dataset.filename = normalizeFileName(`${String(index + 1).padStart(2, '0')}-${image.name || image.alt || 'image'}`);
+                item.innerHTML = `<img src="${image.url}" alt=""><div class="${SCRIPT_NS}-gallery-check"></div>`;
+                item.addEventListener('click', () => {
+                    item.classList.toggle('is-selected');
+                    updateImageGalleryCount(mask);
+                });
+                grid.appendChild(item);
+            });
+            qs(`.${SCRIPT_NS}-gallery-all`, mask).checked = true;
+            updateImageGalleryCount(mask);
+        } catch (error) {
+            console.error(error);
+            grid.textContent = error.message || '读取图片失败';
+        }
+    }
+
+    async function downloadSelectedGalleryImages(mask) {
+        const button = qs(`.${SCRIPT_NS}-gallery-download`, mask);
+        const selected = qsa(`.${SCRIPT_NS}-gallery-item.is-selected`, mask);
+        if (!selected.length) return;
+        button.disabled = true;
+        button.textContent = '下载中...';
+        let success = 0;
+        for (let i = 0; i < selected.length; i += 1) {
+            const item = selected[i];
+            const url = item.dataset.url;
+            const filename = `${item.dataset.filename || `image-${i + 1}`}.png`;
+            try {
+                await downloadUrl(url, filename);
+                success += 1;
+                await new Promise(resolve => setTimeout(resolve, 180));
+            } catch (error) {
+                console.error('download image failed', url, error);
+            }
+        }
+        button.textContent = '下载图片';
+        updateImageGalleryCount(mask);
+        notify(`已触发下载 ${success} 张图片`);
     }
 
     async function refreshMarkdownBar() {
@@ -1078,6 +1297,7 @@
             verifyMarkdownUnlockKey,
             buildMarkdownUnlockKey,
             buildMarkdownFromPage,
+            collectLarkImages,
             copyText,
             getDeviceCode,
             openAdvancedFeature,
