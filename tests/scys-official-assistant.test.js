@@ -4,11 +4,11 @@ const path = require('node:path');
 const vm = require('node:vm');
 const nodeCrypto = require('node:crypto');
 
-const scriptPath = path.resolve(__dirname, '..', '生财有术看图助手-1.9.user.js');
+const scriptPath = path.resolve(__dirname, '..', '生财有术看图助手-1.10.user.js');
 const source = fs.readFileSync(scriptPath, 'utf8');
 
 assert.match(source, /@name\s+生财有术看图助手/);
-assert.match(source, /@version\s+1\.9/);
+assert.match(source, /@version\s+1\.10/);
 assert.match(source, /@author\s+料主（liaozhu913）/);
 assert.match(source, /@description\s+图片增强/);
 assert.doesNotMatch(source, /@description[^\n]*Markdown/);
@@ -80,6 +80,7 @@ const context = {
   TextEncoder,
   TextDecoder,
   URL,
+  setTimeout,
   atob: value => Buffer.from(value, 'base64').toString('binary'),
   btoa: value => Buffer.from(value, 'binary').toString('base64'),
   console,
@@ -225,7 +226,7 @@ assert.equal(typeof helpers.setMarkdownBarEnabled, 'function');
     },
   };
   context.unsafeWindow.fetch = async url => {
-    assert.equal(url, 'https://example.feishu.cn/image.png');
+    assert.match(url, /^https:\/\/example\.feishu\.cn\/image-\d\.png$|^https:\/\/example\.feishu\.cn\/image\.png$/);
     return {
       ok: true,
       async blob() {
@@ -233,21 +234,21 @@ assert.equal(typeof helpers.setMarkdownBarEnabled, 'function');
       },
     };
   };
-  fakeDocument.renderedImages = [{
-    currentSrc: 'https://example.feishu.cn/image.png',
-    src: 'https://example.feishu.cn/image.png',
+  fakeDocument.renderedImages = [1, 2, 3, 4].map(index => ({
+    currentSrc: `https://example.feishu.cn/image-${index}.png`,
+    src: `https://example.feishu.cn/image-${index}.png`,
     naturalWidth: 1080,
     naturalHeight: 720,
     width: 1080,
     height: 720,
     className: 'docx-image success',
     getAttribute(name) {
-      return name === 'alt' ? 'demo.png' : null;
+      return name === 'alt' ? `demo-${index}.png` : null;
     },
     closest() {
       return null;
     },
-  }];
+  }));
   const larkImages = await helpers.collectLarkImages();
   assert.equal(larkImages.length, 1);
   assert.equal(larkImages[0].url, 'https://example.feishu.cn/image.png');
@@ -263,6 +264,10 @@ assert.equal(typeof helpers.setMarkdownBarEnabled, 'function');
   assert.equal(bundle.filename, '飞书测试文档.zip');
   assert.equal(bundle.blob.type, 'application/zip');
   assert.ok(bundle.blob.size > 100);
+  const zipText = Buffer.from(await bundle.blob.arrayBuffer()).toString('latin1');
+  for (const name of ['images/01-demo.png', 'images/02-demo-2.png', 'images/03-demo-3.png', 'images/04-demo-4.png']) {
+    assert.ok(zipText.includes(name), `${name} should be included`);
+  }
   const larkImagesAfterBundle = await helpers.collectLarkImages();
   assert.equal(larkImagesAfterBundle.length, 1);
   assert.equal(larkImagesAfterBundle[0].url, 'https://example.feishu.cn/image.png');
