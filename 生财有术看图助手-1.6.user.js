@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         生财有术看图助手
 // @namespace    https://scys.com/
-// @version      1.5
+// @version      1.6
 // @description  图片增强：点击生财有术官网内容图片即可放大查看、自由缩放、拖拽平移并切换上下张。
 // @author       料主（liaozhu913）
 // @match        https://scys.com/*
@@ -819,6 +819,10 @@
 
     function downloadText(filename, content) {
         const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+        downloadBlob(filename, blob);
+    }
+
+    function downloadBlob(filename, blob) {
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement('a');
         anchor.href = url;
@@ -829,8 +833,14 @@
         URL.revokeObjectURL(url);
     }
 
+    async function pageFetch(url, options = {}) {
+        const pageWindow = getPageWindow();
+        const fetchFn = pageWindow.fetch || fetch;
+        return fetchFn.call(pageWindow, url, { credentials: 'include', ...options });
+    }
+
     async function downloadUrl(url, filename) {
-        const response = await fetch(url);
+        const response = isLarkHost() ? await pageFetch(url) : await fetch(url);
         if (!response.ok) throw new Error(`下载失败：${response.status}`);
         const blob = await response.blob();
         const objectUrl = URL.createObjectURL(blob);
@@ -841,6 +851,137 @@
         anchor.click();
         anchor.remove();
         URL.revokeObjectURL(objectUrl);
+    }
+
+    let crcTable = null;
+
+    function getCrcTable() {
+        if (crcTable) return crcTable;
+        crcTable = new Uint32Array(256);
+        for (let n = 0; n < 256; n += 1) {
+            let c = n;
+            for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+            crcTable[n] = c >>> 0;
+        }
+        return crcTable;
+    }
+
+    function crc32(bytes) {
+        const table = getCrcTable();
+        let crc = 0xffffffff;
+        for (let i = 0; i < bytes.length; i += 1) crc = table[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+        return (crc ^ 0xffffffff) >>> 0;
+    }
+
+    function dosDateTime(date = new Date()) {
+        const time = (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2);
+        const dosDate = ((date.getFullYear() - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
+        return { time, date: dosDate };
+    }
+
+    function writeUint16(target, offset, value) {
+        target[offset] = value & 0xff;
+        target[offset + 1] = (value >>> 8) & 0xff;
+    }
+
+    function writeUint32(target, offset, value) {
+        target[offset] = value & 0xff;
+        target[offset + 1] = (value >>> 8) & 0xff;
+        target[offset + 2] = (value >>> 16) & 0xff;
+        target[offset + 3] = (value >>> 24) & 0xff;
+    }
+
+    async function blobToBytes(content) {
+        if (content instanceof Uint8Array) return content;
+        if (content instanceof Blob) return new Uint8Array(await content.arrayBuffer());
+        return encoder.encode(String(content || ''));
+    }
+
+    async function createZipBlob(entries) {
+        const parts = [];
+        const centralParts = [];
+        let offset = 0;
+        const now = dosDateTime();
+
+        for (const entry of entries) {
+            const nameBytes = encoder.encode(entry.name.replace(/\\/g, '/'));
+            const contentBytes = await blobToBytes(entry.content);
+            const crc = crc32(contentBytes);
+            const local = new Uint8Array(30 + nameBytes.length);
+            writeUint32(local, 0, 0x04034b50);
+            writeUint16(local, 4, 20);
+            writeUint16(local, 6, 0x0800);
+            writeUint16(local, 8, 0);
+            writeUint16(local, 10, now.time);
+            writeUint16(local, 12, now.date);
+            writeUint32(local, 14, crc);
+            writeUint32(local, 18, contentBytes.length);
+            writeUint32(local, 22, contentBytes.length);
+            writeUint16(local, 26, nameBytes.length);
+            local.set(nameBytes, 30);
+            parts.push(local, contentBytes);
+
+            const central = new Uint8Array(46 + nameBytes.length);
+            writeUint32(central, 0, 0x02014b50);
+            writeUint16(central, 4, 20);
+            writeUint16(central, 6, 20);
+            writeUint16(central, 8, 0x0800);
+            writeUint16(central, 10, 0);
+            writeUint16(central, 12, now.time);
+            writeUint16(central, 14, now.date);
+            writeUint32(central, 16, crc);
+            writeUint32(central, 20, contentBytes.length);
+            writeUint32(central, 24, contentBytes.length);
+            writeUint16(central, 28, nameBytes.length);
+            writeUint32(central, 42, offset);
+            central.set(nameBytes, 46);
+            centralParts.push(central);
+            offset += local.length + contentBytes.length;
+        }
+
+        const centralOffset = offset;
+        const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+        const end = new Uint8Array(22);
+        writeUint32(end, 0, 0x06054b50);
+        writeUint16(end, 8, entries.length);
+        writeUint16(end, 10, entries.length);
+        writeUint32(end, 12, centralSize);
+        writeUint32(end, 16, centralOffset);
+
+        return new Blob([...parts, ...centralParts, end], { type: 'application/zip' });
+    }
+
+    async function buildLarkDownloadBundle() {
+        const root = getLarkRootBlock();
+        if (!root) throw new Error('未找到飞书文档数据，请确认页面已加载完成');
+        const title = normalizeFileName(getLarkTitle(root));
+        const entries = [];
+        const blocks = collectLarkImageBlocks(root);
+        let imageIndex = 0;
+
+        for (const block of blocks) {
+            const sources = await fetchLarkImageSources(block);
+            const src = sources?.src || sources?.originSrc || getLarkImageCachedUrl(block);
+            if (!src) continue;
+            const image = block?.snapshot?.image || {};
+            const imageName = ensureImageFileName(`${String(imageIndex + 1).padStart(2, '0')}-${image.name || 'image'}`);
+            const path = `images/${imageName}`;
+            try {
+                const response = await pageFetch(src);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                entries.push({ name: path, content: await response.blob() });
+                image.__scysUrl = path;
+                imageIndex += 1;
+            } catch (error) {
+                console.error('download lark image failed', src, error);
+                image.__scysUrl = src;
+            }
+        }
+
+        const markdown = compactMarkdown([`# ${getLarkTitle(root)}`, `原文：${window.location.href}`, renderLarkBlock(root)].filter(Boolean).join('\n\n'));
+        if (!entries.length) return { filename: `${title}.md`, blob: new Blob([markdown], { type: 'text/markdown;charset=utf-8' }) };
+        entries.push({ name: `${title}.md`, content: markdown });
+        return { filename: `${title}.zip`, blob: await createZipBlob(entries) };
     }
 
     function ensureImageFileName(name) {
@@ -1057,6 +1198,12 @@
     async function runMarkdownAction(action) {
         if (!await ensureMarkdownUnlocked()) return;
         try {
+            if (action === 'download' && isLarkHost()) {
+                const bundle = await buildLarkDownloadBundle();
+                downloadBlob(bundle.filename, bundle.blob);
+                notify('内容已开始下载');
+                return;
+            }
             const markdown = await buildMarkdownFromPage();
             const meta = getArticleMeta();
             if (action === 'view') openPreview(markdown);
@@ -1303,6 +1450,7 @@
             buildMarkdownUnlockKey,
             buildMarkdownFromPage,
             collectLarkImages,
+            buildLarkDownloadBundle,
             copyText,
             getDeviceCode,
             openAdvancedFeature,

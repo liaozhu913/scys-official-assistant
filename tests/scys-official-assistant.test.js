@@ -4,11 +4,11 @@ const path = require('node:path');
 const vm = require('node:vm');
 const nodeCrypto = require('node:crypto');
 
-const scriptPath = path.resolve(__dirname, '..', '生财有术看图助手-1.5.user.js');
+const scriptPath = path.resolve(__dirname, '..', '生财有术看图助手-1.6.user.js');
 const source = fs.readFileSync(scriptPath, 'utf8');
 
 assert.match(source, /@name\s+生财有术看图助手/);
-assert.match(source, /@version\s+1\.5/);
+assert.match(source, /@version\s+1\.6/);
 assert.match(source, /@author\s+料主（liaozhu913）/);
 assert.match(source, /@description\s+图片增强/);
 assert.doesNotMatch(source, /@description[^\n]*Markdown/);
@@ -131,6 +131,7 @@ assert.equal(typeof helpers.verifyMarkdownUnlockKey, 'function');
 assert.equal(typeof helpers.buildMarkdownUnlockKey, 'function');
 assert.equal(typeof helpers.buildMarkdownFromPage, 'function');
 assert.equal(typeof helpers.collectLarkImages, 'function');
+assert.equal(typeof helpers.buildLarkDownloadBundle, 'function');
 assert.equal(typeof helpers.copyText, 'function');
 assert.equal(typeof helpers.isMarkdownBarEnabled, 'function');
 assert.equal(typeof helpers.setMarkdownBarEnabled, 'function');
@@ -218,6 +219,15 @@ assert.equal(typeof helpers.setMarkdownBarEnabled, 'function');
       },
     },
   };
+  context.unsafeWindow.fetch = async url => {
+    assert.equal(url, 'https://example.feishu.cn/image.png');
+    return {
+      ok: true,
+      async blob() {
+        return new Blob(['image-bytes'], { type: 'image/png' });
+      },
+    };
+  };
   const larkImages = await helpers.collectLarkImages();
   assert.equal(larkImages.length, 1);
   assert.equal(larkImages[0].url, 'https://example.feishu.cn/image.png');
@@ -227,6 +237,10 @@ assert.equal(typeof helpers.setMarkdownBarEnabled, 'function');
   assert.match(larkMarkdown, /正文/);
   assert.match(larkMarkdown, /- 列表项/);
   assert.match(larkMarkdown, /!\[demo\.png\]\(https:\/\/example\.feishu\.cn\/image\.png\)/);
+  const bundle = await helpers.buildLarkDownloadBundle();
+  assert.equal(bundle.filename, '飞书测试文档.zip');
+  assert.equal(bundle.blob.type, 'application/zip');
+  assert.ok(bundle.blob.size > 100);
 
   console.log('scys-official-assistant tests passed');
 })().catch(error => {
