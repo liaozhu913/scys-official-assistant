@@ -4,16 +4,19 @@ const path = require('node:path');
 const vm = require('node:vm');
 const nodeCrypto = require('node:crypto');
 
-const scriptPath = path.resolve(__dirname, '..', '生财有术看图助手-1.2.user.js');
+const scriptPath = path.resolve(__dirname, '..', '生财有术看图助手-1.3.user.js');
 const source = fs.readFileSync(scriptPath, 'utf8');
 
 assert.match(source, /@name\s+生财有术看图助手/);
-assert.match(source, /@version\s+1\.2/);
+assert.match(source, /@version\s+1\.3/);
 assert.match(source, /@author\s+料主（liaozhu913）/);
 assert.match(source, /@description\s+图片增强/);
 assert.doesNotMatch(source, /@description[^\n]*Markdown/);
 assert.match(source, /@match\s+https:\/\/\*\.feishu\.cn\/\*/);
+assert.match(source, /@match\s+https:\/\/\*\.feishu\.net\/\*/);
+assert.match(source, /@match\s+https:\/\/\*\.feishu-pre\.net\/\*/);
 assert.match(source, /@match\s+https:\/\/\*\.larksuite\.com\/\*/);
+assert.match(source, /@grant\s+unsafeWindow/);
 assert.match(source, /@grant\s+GM_registerMenuCommand/);
 assert.match(source, /@grant\s+GM_getValue/);
 assert.match(source, /@grant\s+GM_setValue/);
@@ -85,6 +88,7 @@ const context = {
     context.gmStore[key] = value;
   },
   gmStore: {},
+  unsafeWindow: {},
   crypto: {
     subtle: {
       async importKey(_format, keyBytes) {
@@ -173,7 +177,7 @@ assert.equal(typeof helpers.setMarkdownBarEnabled, 'function');
   context.window.location.href = context.location.href;
   context.location.hostname = 'example.feishu.cn';
   context.window.location.hostname = 'example.feishu.cn';
-  context.window.PageMain = {
+  context.unsafeWindow.PageMain = {
     blockManager: {
       rootBlockModel: {
         type: 'page',

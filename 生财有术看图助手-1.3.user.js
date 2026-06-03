@@ -1,11 +1,13 @@
 // ==UserScript==
 // @name         生财有术看图助手
 // @namespace    https://scys.com/
-// @version      1.2
+// @version      1.3
 // @description  图片增强：点击生财有术官网内容图片即可放大查看、自由缩放、拖拽平移并切换上下张。
 // @author       料主（liaozhu913）
 // @match        https://scys.com/*
 // @match        https://*.feishu.cn/*
+// @match        https://*.feishu.net/*
+// @match        https://*.feishu-pre.net/*
 // @match        https://*.larksuite.com/*
 // @match        https://*.larkoffice.com/*
 // @match        https://*.larkenterprise.com/*
@@ -14,6 +16,7 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_setClipboard
+// @grant        unsafeWindow
 // @run-at       document-idle
 // @license      MIT
 // ==/UserScript==
@@ -574,11 +577,20 @@
     }
 
     function isLarkHost() {
-        return /(^|\.)((feishu\.cn)|(larksuite\.com)|(larkoffice\.com)|(larkenterprise\.com))$/i.test(location.hostname);
+        return /(^|\.)((feishu\.cn)|(feishu\.net)|(feishu-pre\.net)|(larksuite\.com)|(larkoffice\.com)|(larkenterprise\.com))$/i.test(location.hostname);
+    }
+
+    function getPageWindow() {
+        try {
+            if (typeof unsafeWindow !== 'undefined' && unsafeWindow) return unsafeWindow;
+        } catch (error) {
+            // Fall back to sandbox window.
+        }
+        return window;
     }
 
     function getLarkRootBlock() {
-        const pageMain = window.PageMain;
+        const pageMain = getPageWindow().PageMain;
         return pageMain?.blockManager?.rootBlockModel || pageMain?.blockManager?.model?.rootBlockModel || null;
     }
 
