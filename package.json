@@ -1,0 +1,8 @@
+{
+  "name": "scys-official-assistant",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "node --check \"生财有术官网助手-1.0.user.js\" && node tests/scys-official-assistant.test.js"
+  }
+}
