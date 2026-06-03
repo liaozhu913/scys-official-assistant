@@ -4,14 +4,16 @@ const path = require('node:path');
 const vm = require('node:vm');
 const nodeCrypto = require('node:crypto');
 
-const scriptPath = path.resolve(__dirname, '..', '生财有术看图助手-1.1.user.js');
+const scriptPath = path.resolve(__dirname, '..', '生财有术看图助手-1.2.user.js');
 const source = fs.readFileSync(scriptPath, 'utf8');
 
 assert.match(source, /@name\s+生财有术看图助手/);
-assert.match(source, /@version\s+1\.1/);
+assert.match(source, /@version\s+1\.2/);
 assert.match(source, /@author\s+料主（liaozhu913）/);
 assert.match(source, /@description\s+图片增强/);
 assert.doesNotMatch(source, /@description[^\n]*Markdown/);
+assert.match(source, /@match\s+https:\/\/\*\.feishu\.cn\/\*/);
+assert.match(source, /@match\s+https:\/\/\*\.larksuite\.com\/\*/);
 assert.match(source, /@grant\s+GM_registerMenuCommand/);
 assert.match(source, /@grant\s+GM_getValue/);
 assert.match(source, /@grant\s+GM_setValue/);
@@ -166,6 +168,45 @@ assert.equal(typeof helpers.setMarkdownBarEnabled, 'function');
   const process = new URL(normalized).searchParams.get('x-oss-process');
   assert.match(process, /w_2400/);
   assert.match(process, /quality,q_95/);
+
+  context.location.href = 'https://example.feishu.cn/docx/demo';
+  context.window.location.href = context.location.href;
+  context.location.hostname = 'example.feishu.cn';
+  context.window.location.hostname = 'example.feishu.cn';
+  context.window.PageMain = {
+    blockManager: {
+      rootBlockModel: {
+        type: 'page',
+        zoneState: { allText: '飞书测试文档', content: { ops: [] } },
+        snapshot: { type: 'page' },
+        children: [
+          {
+            type: 'heading1',
+            snapshot: { type: 'heading1' },
+            zoneState: { allText: '标题一', content: { ops: [{ insert: '标题一' }] } },
+            children: [],
+          },
+          {
+            type: 'text',
+            snapshot: { type: 'text' },
+            zoneState: { allText: '正文', content: { ops: [{ insert: '正文' }] } },
+            children: [],
+          },
+          {
+            type: 'bullet',
+            snapshot: { type: 'bullet' },
+            zoneState: { allText: '列表项', content: { ops: [{ insert: '列表项' }] } },
+            children: [],
+          },
+        ],
+      },
+    },
+  };
+  const larkMarkdown = helpers.buildMarkdownFromPage();
+  assert.match(larkMarkdown, /# 飞书测试文档/);
+  assert.match(larkMarkdown, /##? 标题一/);
+  assert.match(larkMarkdown, /正文/);
+  assert.match(larkMarkdown, /- 列表项/);
 
   console.log('scys-official-assistant tests passed');
 })().catch(error => {

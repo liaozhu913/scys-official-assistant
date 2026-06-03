@@ -1,10 +1,14 @@
 // ==UserScript==
 // @name         生财有术看图助手
 // @namespace    https://scys.com/
-// @version      1.1
+// @version      1.2
 // @description  图片增强：点击生财有术官网内容图片即可放大查看、自由缩放、拖拽平移并切换上下张。
 // @author       料主（liaozhu913）
 // @match        https://scys.com/*
+// @match        https://*.feishu.cn/*
+// @match        https://*.larksuite.com/*
+// @match        https://*.larkoffice.com/*
+// @match        https://*.larkenterprise.com/*
 // @grant        GM_addStyle
 // @grant        GM_registerMenuCommand
 // @grant        GM_getValue
@@ -555,7 +559,7 @@
         };
     }
 
-    function buildMarkdownFromPage() {
+    function buildScysMarkdownFromPage() {
         const root = qs('.feishu-doc-content');
         if (!root) throw new Error('未找到文章正文容器 .feishu-doc-content');
         const meta = getArticleMeta();
@@ -567,6 +571,137 @@
         ].filter(Boolean).join('\n\n');
         const body = qsa(':scope > .vc-doc-item', root).map(renderBlock).filter(Boolean).join('\n\n');
         return compactMarkdown(`${header}\n\n${body}`);
+    }
+
+    function isLarkHost() {
+        return /(^|\.)((feishu\.cn)|(larksuite\.com)|(larkoffice\.com)|(larkenterprise\.com))$/i.test(location.hostname);
+    }
+
+    function getLarkRootBlock() {
+        const pageMain = window.PageMain;
+        return pageMain?.blockManager?.rootBlockModel || pageMain?.blockManager?.model?.rootBlockModel || null;
+    }
+
+    function getLarkTitle(root) {
+        const title = root?.zoneState?.allText || document.title || '飞书文档';
+        return String(title).replace(/\s+-\s+飞书云文档.*$/i, '').trim() || '飞书文档';
+    }
+
+    function normalizeLarkText(text) {
+        return String(text || '').replace(/\r/g, '').replace(/\n+$/g, '');
+    }
+
+    function renderLarkInlineOp(op) {
+        if (!op) return '';
+        const attributes = op.attributes || {};
+        let insert = String(op.insert || '');
+        if (attributes.fixEnter || (!op.attributes && insert === '\n')) return '';
+
+        if (attributes['inline-component']) {
+            try {
+                const component = JSON.parse(attributes['inline-component']);
+                if (component?.type === 'mention_doc') {
+                    attributes.link = component.data?.raw_url || attributes.link;
+                    insert += component.data?.title || '';
+                } else if (component?.type === 'user') {
+                    insert = insert || '@用户';
+                }
+            } catch (error) {
+                // Keep original text when inline component metadata is not parseable.
+            }
+        }
+
+        let text = escapeMarkdownText(normalizeLarkText(insert));
+        if (!text && attributes.equation) text = `$${normalizeLarkText(attributes.equation)}$`;
+        if (!text) return '';
+        if (attributes.inlineCode) text = `\`${text.replace(/`/g, '\\`')}\``;
+        if (attributes.bold) text = `**${text}**`;
+        if (attributes.italic) text = `*${text}*`;
+        if (attributes.strikethrough) text = `~~${text}~~`;
+        if (attributes.underline) text = `<u>${text}</u>`;
+        if (attributes.link) text = `[${text}](${escapeMarkdownUrl(decodeURIComponent(String(attributes.link)))})`;
+        return text;
+    }
+
+    function renderLarkInline(block) {
+        const ops = block?.zoneState?.content?.ops;
+        if (Array.isArray(ops)) {
+            const text = ops.map(renderLarkInlineOp).join('').trim();
+            if (text) return text;
+        }
+        return normalizeLarkText(block?.zoneState?.allText || '').trim();
+    }
+
+    function renderLarkChildren(block, depth = 0) {
+        return (block?.children || []).map(child => renderLarkBlock(child, depth)).filter(Boolean).join('\n\n');
+    }
+
+    function prefixLines(text, prefix) {
+        return String(text || '').split('\n').map(line => `${prefix}${line}`).join('\n');
+    }
+
+    function renderLarkImage(block) {
+        const image = block?.snapshot?.image || {};
+        const alt = escapeMarkdownText(image.caption?.text?.initialAttributedTexts?.text?.[0] || image.name || '图片');
+        const src = image.url || image.originSrc || image.src || (image.token ? `lark-image-token:${image.token}` : '');
+        return src ? `![${alt}](${escapeMarkdownUrl(src)})` : '';
+    }
+
+    function renderLarkListItem(block, depth, ordered, todo) {
+        const text = renderLarkInline(block);
+        const childText = renderLarkChildren(block, depth + 1);
+        const indent = '  '.repeat(depth);
+        const marker = todo ? (block?.snapshot?.done ? '- [x] ' : '- [ ] ') : ordered ? `${block?.snapshot?.seq && /^[0-9]+$/.test(block.snapshot.seq) ? block.snapshot.seq : 1}. ` : '- ';
+        const head = `${indent}${marker}${text || ' '}`;
+        return childText ? `${head}\n${prefixLines(childText, '  ')}` : head;
+    }
+
+    function renderLarkBlock(block, depth = 0) {
+        if (!block || !block.type || block?.snapshot?.type === 'pending') return '';
+        const type = block.type;
+        if (type === 'page') return renderLarkChildren(block, depth);
+        if (type === 'divider') return '---';
+        if (/^heading[1-6]$/.test(type)) {
+            const level = Number(type.replace('heading', ''));
+            const text = renderLarkInline(block);
+            const children = renderLarkChildren(block, depth);
+            return [text ? `${'#'.repeat(level)} ${text}` : '', children].filter(Boolean).join('\n\n');
+        }
+        if (type === 'text' || /^heading[7-9]$/.test(type)) {
+            const text = renderLarkInline(block);
+            const children = renderLarkChildren(block, depth);
+            return [text, children].filter(Boolean).join('\n\n');
+        }
+        if (type === 'bullet') return renderLarkListItem(block, depth, false, false);
+        if (type === 'ordered') return renderLarkListItem(block, depth, true, false);
+        if (type === 'todo') return renderLarkListItem(block, depth, false, true);
+        if (type === 'quote' || type === 'quote_container' || type === 'callout') {
+            const text = [renderLarkInline(block), renderLarkChildren(block, depth)].filter(Boolean).join('\n\n');
+            return text ? prefixLines(text, '> ') : '';
+        }
+        if (type === 'code') {
+            const lang = String(block.language || '').toLowerCase();
+            return `\`\`\`${lang}\n${normalizeLarkText(block?.zoneState?.allText || '')}\n\`\`\``;
+        }
+        if (type === 'image') return renderLarkImage(block);
+        if (type === 'file') {
+            const file = block?.snapshot?.file || {};
+            return file.url ? `[${escapeMarkdownText(file.name || '文件')}](${escapeMarkdownUrl(file.url)})` : escapeMarkdownText(file.name || '');
+        }
+        return renderLarkChildren(block, depth) || renderLarkInline(block);
+    }
+
+    function buildLarkMarkdownFromPage() {
+        const root = getLarkRootBlock();
+        if (!root) throw new Error('未找到飞书文档数据，请确认页面已加载完成');
+        const title = getLarkTitle(root);
+        const body = renderLarkBlock(root);
+        return compactMarkdown([`# ${title}`, `原文：${window.location.href}`, body].filter(Boolean).join('\n\n'));
+    }
+
+    function buildMarkdownFromPage() {
+        if (isLarkHost()) return buildLarkMarkdownFromPage();
+        return buildScysMarkdownFromPage();
     }
 
     function normalizeFileName(name) {
